@@ -2,9 +2,11 @@
 FROM rust:1-slim
 
 # Install required system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt update && apt install -y \
     build-essential \
+    lld \
     pkg-config \
+    clang \
     libssl-dev \
     ca-certificates \
     git \
@@ -23,6 +25,9 @@ COPY . .
 
 # Build apollo_node binary with --locked as requested in the requirements
 RUN cargo build --locked --bin apollo_node --release
+
+# Copy the preset config
+COPY devnet/preset_config.json /app/preset_config.json
 
 # Expose common ports (RPC and monitoring)
 EXPOSE 8080 8081 8082 8545
