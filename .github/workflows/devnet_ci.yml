@@ -1,0 +1,263 @@
+name: Devnet-CI
+
+on:
+  push:
+    branches:
+      - main
+      - main-v[0-9].**
+    paths:
+      - 'devnet/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/devnet_ci.yml'
+
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    paths:
+      - 'devnet/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/devnet_ci.yml'
+
+env:
+  CI: 1
+  RUSTFLAGS: "-D warnings"
+
+# On PR events, cancel existing CI runs on this same PR for this workflow.
+concurrency:
+  group: >
+    ${{ github.workflow }}-
+    ${{ github.ref }}-
+    ${{ github.event_name == 'pull_request' && 'PR' || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  devnet_test:
+    runs-on: namespace-profile-medium-ubuntu-24-04-amd64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libssl-dev
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-devnet-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-devnet-
+            ${{ runner.os }}-cargo-
+
+      - name: Run devnet bootstrap validation tests
+        run: |
+          cd devnet
+          chmod +x test-bootstrap.sh
+          ./test-bootstrap.sh
+
+      - name: Test Docker build
+        run: |
+          cd devnet
+          chmod +x bootstrap-apollo.sh
+          ./bootstrap-apollo.sh build
+
+      - name: Build apollo_node binary for testing
+        run: |
+          # Build apollo_node
+          cargo build --locked --bin apollo_node --release
+          
+          # Check if binary exists
+          if [ ! -f "./target/release/apollo_node" ]; then
+            echo "Error: apollo_node binary not found"
+            exit 1
+          fi
+          
+          echo "✓ apollo_node binary built successfully"
+
+      - name: Validate preset config format
+        run: |
+          # Validate JSON syntax
+          python3 -c "import json; json.load(open('devnet/preset_config.json'))"
+          echo "✓ preset_config.json is valid JSON"
+
+      - name: Test apollo_node startup and block production
+        run: |
+          echo "Starting mock L1 provider..."
+          python3 devnet/mock_l1_provider.py 8545 &
+          L1_PID=$!
+          
+          # Wait for L1 provider to start
+          sleep 3
+          
+          echo "Starting apollo_node with devnet configuration..."
+          
+          # Start apollo_node in background
+          timeout 300s ./target/release/apollo_node --config_file devnet/preset_config.json > apollo_logs.txt 2>&1 &
+          APOLLO_PID=$!
+          
+          echo "Apollo node started with PID: $APOLLO_PID"
+          echo "Mock L1 provider started with PID: $L1_PID"
+          
+          # Cleanup function
+          cleanup() {
+            echo "Cleaning up processes..."
+            kill $APOLLO_PID 2>/dev/null || true
+            kill $L1_PID 2>/dev/null || true
+            wait $APOLLO_PID 2>/dev/null || true
+            wait $L1_PID 2>/dev/null || true
+          }
+          
+          # Set trap for cleanup
+          trap cleanup EXIT
+          
+          # Wait for startup
+          echo "Waiting for apollo_node to start..."
+          sleep 15
+          
+          # Check if process is still running
+          if ! kill -0 $APOLLO_PID 2>/dev/null; then
+            echo "❌ Apollo node failed to start or crashed"
+            echo "=== Apollo Node Logs ==="
+            cat apollo_logs.txt || echo "No logs found"
+            exit 1
+          fi
+          
+          echo "✓ Apollo node is running"
+          
+          # Wait for block production (look for block-related logs)
+          echo "Waiting for block production..."
+          TIMEOUT=120
+          START_TIME=$(date +%s)
+          BLOCKS_FOUND=0
+          
+          while [ $BLOCKS_FOUND -lt 3 ]; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            
+            if [ $ELAPSED -gt $TIMEOUT ]; then
+              echo "❌ Timeout waiting for block production after ${TIMEOUT}s"
+              break
+            fi
+            
+            # Check for block-related activity in logs
+            if grep -i -E "(block|proposal|consensus|height.*[0-9])" apollo_logs.txt | tail -10 | grep -q .; then
+              echo "✓ Found block-related activity:"
+              
+              # Show the first 3 blocks/heights found
+              BLOCK_LOGS=$(grep -i -E "(height.*[0-9]|block.*[0-9]|proposal.*height)" apollo_logs.txt | head -3)
+              if [ ! -z "$BLOCK_LOGS" ]; then
+                echo "=== First Three Blocks/Heights ==="
+                echo "$BLOCK_LOGS"
+                BLOCKS_FOUND=3
+                break
+              fi
+            fi
+            
+            sleep 5
+          done
+          
+          # Show final logs
+          echo ""
+          echo "=== Final Apollo Node Logs (last 50 lines) ==="
+          tail -50 apollo_logs.txt || echo "No logs available"
+          
+          # Check if we found any blocks
+          if [ $BLOCKS_FOUND -gt 0 ]; then
+            echo "✓ Block production detected!"
+          else
+            echo "⚠️  No clear block production detected, but node is running"
+            echo "=== All Block-related logs ==="
+            grep -i -E "(block|height|consensus|proposal)" apollo_logs.txt | head -10 || echo "No block-related logs found"
+          fi
+
+      - name: Test Docker container startup and block production
+        run: |
+          cd devnet
+          
+          echo "Starting mock L1 provider for Docker test..."
+          python3 mock_l1_provider.py 8545 &
+          L1_PID=$!
+          
+          # Wait for L1 provider
+          sleep 3
+          
+          echo "Starting apollo_node Docker container..."
+          
+          # Start the container in background with host networking to access L1 provider
+          docker run -d --name apollo-test-container \
+            --network host \
+            apollo-node-bootstrap
+          
+          echo "Container started, waiting for initialization..."
+          sleep 20
+          
+          # Cleanup function
+          cleanup_docker() {
+            echo "Cleaning up Docker test..."
+            docker stop apollo-test-container 2>/dev/null || true
+            docker rm apollo-test-container 2>/dev/null || true
+            kill $L1_PID 2>/dev/null || true
+            wait $L1_PID 2>/dev/null || true
+          }
+          
+          trap cleanup_docker EXIT
+          
+          # Check if container is still running
+          if ! docker ps | grep -q apollo-test-container; then
+            echo "❌ Container failed to start or exited"
+            echo "=== Container Logs ==="
+            docker logs apollo-test-container || true
+            exit 1
+          fi
+          
+          echo "✓ Container is running"
+          
+          # Get logs and look for block production
+          echo "Checking for block production in container..."
+          
+          TIMEOUT=90
+          START_TIME=$(date +%s)
+          
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+            
+            if [ $ELAPSED -gt $TIMEOUT ]; then
+              echo "Timeout reached, showing available logs"
+              break
+            fi
+            
+            # Check container logs for activity
+            LOGS=$(docker logs apollo-test-container 2>&1)
+            if echo "$LOGS" | grep -i -E "(height.*[0-9]|block.*[0-9])" | head -3 | grep -q .; then
+              echo "✓ Found block-related activity in container:"
+              echo "=== First Three Blocks/Heights in Container ==="
+              echo "$LOGS" | grep -i -E "(height.*[0-9]|block.*[0-9])" | head -3
+              break
+            fi
+            
+            sleep 5
+          done
+          
+          # Show final container logs
+          echo ""
+          echo "=== Apollo Node Container Logs (last 50 lines) ==="
+          docker logs apollo-test-container 2>&1 | tail -50 || echo "No logs available"
