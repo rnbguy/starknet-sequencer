@@ -5,6 +5,7 @@ set -e
 # This script helps bootstrap an apollo_node with a dummy L1 provider for development/testing
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 DOCKER_IMAGE_NAME="apollo-node-bootstrap"
 CONTAINER_NAME="apollo-node-devnet"
 
@@ -91,14 +92,14 @@ fi
 # Function to build the Docker image
 build_image() {
     print_info "Building apollo_node Docker image..."
-    cd "$SCRIPT_DIR"
+    cd "$PROJECT_ROOT"
     
     if ! command -v docker &> /dev/null; then
         print_error "Docker is not installed or not in PATH"
         exit 1
     fi
     
-    docker build -f Dockerfile.apollo-bootstrap -t "$DOCKER_IMAGE_NAME" .
+    docker build -f devnet/Dockerfile.apollo-bootstrap -t "$DOCKER_IMAGE_NAME" .
     print_info "Docker image '$DOCKER_IMAGE_NAME' built successfully"
 }
 
@@ -106,18 +107,18 @@ build_image() {
 run_dev() {
     print_info "Running apollo_node in development mode with cargo run..."
     
-    cd "$SCRIPT_DIR"
+    cd "$PROJECT_ROOT"
     
-    if [[ ! -f "preset_config.json" ]]; then
-        print_error "preset_config.json not found in current directory"
+    if [[ ! -f "devnet/preset_config.json" ]]; then
+        print_error "devnet/preset_config.json not found"
         exit 1
     fi
     
-    print_info "Starting apollo_node with preset_config.json..."
-    print_info "This will run: cargo run --locked --bin apollo_node -- --config_file preset_config.json"
+    print_info "Starting apollo_node with devnet/preset_config.json..."
+    print_info "This will run: cargo run --locked --bin apollo_node -- --config_file devnet/preset_config.json"
     
     # Run apollo_node with cargo run as specified in requirements
-    cargo run --locked --bin apollo_node -- --config_file preset_config.json
+    cargo run --locked --bin apollo_node -- --config_file devnet/preset_config.json
 }
 
 # Function to run the container

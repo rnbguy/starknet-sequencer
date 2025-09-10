@@ -18,8 +18,11 @@ The bootstrap script creates a containerized environment that:
 
 ## Quick Start
 
+From the project root directory:
+
 1. **Build the Docker image:**
    ```bash
+   cd devnet
    ./bootstrap-apollo.sh build
    ```
 
@@ -62,6 +65,7 @@ The bootstrap script creates a containerized environment that:
 
 ```bash
 # Build and run with default settings
+cd devnet
 ./bootstrap-apollo.sh build
 ./bootstrap-apollo.sh run
 

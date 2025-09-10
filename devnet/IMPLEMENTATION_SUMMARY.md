@@ -29,6 +29,7 @@ This implementation provides a complete solution for bootstrapping `apollo_node`
 ./bootstrap-apollo.sh run
 
 # 3. Alternative: Run directly with cargo (development mode)
+cd devnet
 ./bootstrap-apollo.sh run-dev
 
 # 4. Check logs
