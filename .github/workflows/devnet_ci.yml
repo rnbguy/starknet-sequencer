@@ -26,7 +26,7 @@ on:
 
 env:
   CI: 1
-  RUSTFLAGS: "-D warnings -C link-arg=-fuse-ld=lld"
+  RUSTFLAGS: "-D warnings"
 
 # On PR events, cancel existing CI runs on this same PR for this workflow.
 concurrency:
@@ -53,7 +53,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y lld build-essential pkg-config libssl-dev
+          sudo apt-get install -y build-essential pkg-config libssl-dev
 
       - name: Cache Cargo dependencies
         uses: actions/cache@v3

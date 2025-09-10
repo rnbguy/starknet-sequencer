@@ -8,7 +8,6 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     ca-certificates \
     git \
-    lld \
     python3 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -23,7 +22,6 @@ COPY rust-toolchain.toml ./
 COPY . .
 
 # Build apollo_node binary with --locked as requested in the requirements
-ENV RUSTFLAGS="-C link-arg=-fuse-ld=lld"
 RUN cargo build --locked --bin apollo_node --release
 
 # Expose common ports (RPC and monitoring)
