@@ -1,0 +1,33 @@
+{
+  "base_layer_config.#is_none": false,
+  "base_layer_config.node_url": "http://localhost:8545",
+  "base_layer_config.prague_blob_gas_calc": true,
+  "base_layer_config.starknet_contract_address": "0x0000000000000000000000000000000000000000",
+  "base_layer_config.timeout_millis": 1000,
+  
+  "batcher_config.#is_none": true,
+  "class_manager_config.#is_none": true,
+  "consensus_manager_config.#is_none": true,
+  "gateway_config.#is_none": true,
+  "http_server_config.#is_none": true,
+  "l1_endpoint_monitor_config.#is_none": true,
+  "l1_gas_price_provider_config.#is_none": true,
+  "mempool_config.#is_none": true,
+  "mempool_p2p_config.#is_none": true,
+  "monitoring_endpoint_config.#is_none": true,
+  "signature_manager_config.#is_none": true,
+  "state_sync_config.#is_none": true,
+  
+  "components.batcher.execution_mode": "Disabled",
+  "components.class_manager.execution_mode": "Disabled",
+  "components.consensus_manager.execution_mode": "Disabled",
+  "components.gateway.execution_mode": "Disabled",
+  "components.http_server.execution_mode": "Enabled",
+  "components.l1_endpoint_monitor.execution_mode": "Disabled",
+  "components.l1_gas_price_scraper.execution_mode": "Disabled",
+  "components.mempool.execution_mode": "Disabled",
+  "components.mempool_p2p.execution_mode": "Disabled",
+  "components.monitoring_endpoint.execution_mode": "Enabled",
+  "components.signature_manager.execution_mode": "Disabled",
+  "components.state_sync.execution_mode": "Disabled"
+}

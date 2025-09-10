@@ -1,0 +1,31 @@
+# Simple Dockerfile for bootstrapping apollo_node with dummy L1 provider
+FROM rust:1-slim
+
+# Install required system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy source code
+COPY . .
+
+# Build apollo_node binary with --locked as requested in the requirements
+RUN cargo build --locked --bin apollo_node --release
+
+# Copy the preset config
+COPY preset_config.json /app/preset_config.json
+
+# Expose common ports (RPC and monitoring)
+EXPOSE 8080 8081 8082
+
+# Create data directory for mounting
+RUN mkdir -p /data
+
+# Default command to run apollo_node with preset config
+CMD ["./target/release/apollo_node", "--config_file", "preset_config.json"]
