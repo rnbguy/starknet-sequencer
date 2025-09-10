@@ -1,33 +1,72 @@
-# Apollo Node Bootstrap Script
+# Apollo Node Devnet Bootstrap
 
-This script provides a simple way to bootstrap an `apollo_node` with a dummy L1 provider for development and testing purposes.
+This directory provides a complete devnet environment for running `apollo_node` with a mock L1 provider for development and testing purposes.
 
 ## Overview
 
-The bootstrap script creates a containerized environment that:
-- Uses `rust:1-slim` as the base image
-- Builds the `apollo_node` binary using `cargo build --bin apollo_node --release`
-- Runs the node in devnet mode with a preset configuration that includes a dummy L1 provider
-- Provides easy management commands for running, stopping, and monitoring the node
+The devnet setup includes:
+- **Mock L1 Provider**: A simple Python HTTP server that responds to Ethereum JSON-RPC calls
+- **Apollo Node**: Configured to run in devnet mode with all necessary components enabled
+- **Docker Support**: Complete containerized environment for easy deployment
+- **CI Integration**: Automated testing that validates block production
 
 ## Files
 
-- `Dockerfile.apollo-bootstrap` - Simple Dockerfile based on rust:1-slim for building apollo_node
-- `preset_config.json` - Minimal devnet configuration with dummy L1 provider settings
-- `bootstrap-apollo.sh` - Main bootstrap script with management commands
+- `Dockerfile.apollo-bootstrap` - Docker image based on rust:1-slim that builds apollo_node
+- `preset_config.json` - Complete devnet configuration enabling consensus, batcher, mempool, etc.
+- `bootstrap-apollo.sh` - Main management script with build, run, stop commands
+- `mock_l1_provider.py` - Simple L1 provider that responds to basic Ethereum JSON-RPC calls
+- `start_devnet.sh` - Docker startup script that runs both L1 provider and apollo_node
+- `test-bootstrap.sh` - Validation script for testing the setup
 
 ## Quick Start
 
-From the project root directory:
+### Using Docker (Recommended)
 
-1. **Build the Docker image:**
+1. **Build and run:**
    ```bash
    cd devnet
    ./bootstrap-apollo.sh build
+   ./bootstrap-apollo.sh run
    ```
 
-2. **Run apollo_node in devnet mode:**
+### Using Cargo (Development)
+
+1. **Run directly with cargo:**
    ```bash
+   cd devnet
+   ./bootstrap-apollo.sh run-dev
+   ```
+
+This will:
+- Start a mock L1 provider on port 8545
+- Start apollo_node with the devnet configuration
+- Begin block production automatically
+
+## Features
+
+### Mock L1 Provider
+The mock L1 provider (`mock_l1_provider.py`) responds to common Ethereum JSON-RPC methods:
+- `eth_chainId` - Returns mainnet chain ID
+- `eth_blockNumber` - Returns incrementing block numbers
+- `eth_getBlockByNumber` - Returns mock block data
+- `eth_call` - Returns empty results for contract calls
+- `eth_getLogs` - Returns empty log arrays
+
+### Complete Devnet Configuration
+The `preset_config.json` enables all necessary components:
+- **Consensus Manager**: Enabled for block production
+- **Batcher**: Processes transactions into batches
+- **Mempool**: Manages pending transactions
+- **Gateway**: Handles external requests
+- **HTTP Server**: Provides RPC endpoints (port 8080)
+- **Monitoring**: Provides metrics endpoints (port 8081)
+
+### Block Production
+The devnet is configured to automatically start producing blocks with:
+- Consensus enabled with single validator
+- Fast block times for development
+- L1 DA mode disabled for standalone operation
    ./bootstrap-apollo.sh run
    ```
 

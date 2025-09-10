@@ -114,11 +114,32 @@ run_dev() {
         exit 1
     fi
     
+    # Start mock L1 provider in background
+    print_info "Starting mock L1 provider on port 8545..."
+    python3 devnet/mock_l1_provider.py 8545 &
+    L1_PID=$!
+    
+    # Wait a moment for L1 provider to start
+    sleep 2
+    
     print_info "Starting apollo_node with devnet/preset_config.json..."
     print_info "This will run: cargo run --locked --bin apollo_node -- --config_file devnet/preset_config.json"
     
+    # Cleanup function
+    cleanup() {
+        print_info "Cleaning up..."
+        kill $L1_PID 2>/dev/null || true
+        exit 0
+    }
+    
+    # Set trap for cleanup on exit
+    trap cleanup INT TERM
+    
     # Run apollo_node with cargo run as specified in requirements
     cargo run --locked --bin apollo_node -- --config_file devnet/preset_config.json
+    
+    # Cleanup when done
+    cleanup
 }
 
 # Function to run the container
@@ -139,18 +160,38 @@ run_container() {
     # Create data directory if it doesn't exist
     mkdir -p "$SCRIPT_DIR/data"
     
+    # Start mock L1 provider in background
+    print_info "Starting mock L1 provider on port 8545..."
+    python3 "$SCRIPT_DIR/mock_l1_provider.py" 8545 &
+    L1_PID=$!
+    
+    # Wait a moment for L1 provider to start
+    sleep 2
+    
     print_info "Running apollo_node on port $RPC_PORT..."
     print_info "Data directory: $SCRIPT_DIR/data"
     print_info "Config file: preset_config.json (with dummy L1 provider)"
+    print_info "Mock L1 provider running on port 8545"
+    
+    # Cleanup function
+    cleanup_container() {
+        print_info "Cleaning up..."
+        kill $L1_PID 2>/dev/null || true
+        docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+        docker rm "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    }
+    
+    # Set trap for cleanup on exit
+    trap cleanup_container INT TERM
     
     # Run the container
     docker run -d \
         --name "$CONTAINER_NAME" \
+        --network host \
         -p "$RPC_PORT:8080" \
         -p "$((RPC_PORT + 1)):8081" \
         -p "$((RPC_PORT + 2)):8082" \
         -v "$SCRIPT_DIR/data:/data" \
-        -v "$SCRIPT_DIR/preset_config.json:/app/preset_config.json" \
         $ADDITIONAL_VOLUMES \
         "$DOCKER_IMAGE_NAME"
     
@@ -158,19 +199,38 @@ run_container() {
     print_info "RPC endpoint: http://localhost:$RPC_PORT"
     print_info "Monitoring: http://localhost:$((RPC_PORT + 1))"
     print_info "Additional port: http://localhost:$((RPC_PORT + 2))"
+    print_info "Mock L1 provider: http://localhost:8545"
     print_info ""
     print_info "To see logs: $0 logs"
     print_info "To stop: $0 stop"
+    print_info ""
+    print_info "Press Ctrl+C to stop both the container and mock L1 provider"
+    
+    # Wait for container to exit or user interrupt
+    while docker ps -q -f name="$CONTAINER_NAME" | grep -q .; do
+        sleep 5
+    done
+    
+    # Cleanup when done
+    cleanup_container
 }
 
 # Function to stop the container
 stop_container() {
-    print_info "Stopping apollo_node container..."
+    print_info "Stopping apollo_node container and mock L1 provider..."
+    
+    # Stop container
     if docker ps -q -f name="$CONTAINER_NAME" | grep -q .; then
         docker stop "$CONTAINER_NAME"
         print_info "Container stopped successfully"
     else
         print_warning "Container '$CONTAINER_NAME' is not running"
+    fi
+    
+    # Stop mock L1 provider if running
+    if pgrep -f "mock_l1_provider.py" > /dev/null; then
+        pkill -f "mock_l1_provider.py"
+        print_info "Mock L1 provider stopped"
     fi
 }
 
